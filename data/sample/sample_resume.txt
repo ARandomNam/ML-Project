@@ -1,0 +1,30 @@
+John Smith
+Software Engineer
+
+EXPERIENCE
+Software Developer at TechCorp (2021-2023)
+- Developed web applications using Python, Django, and React
+- Implemented RESTful APIs and microservices architecture
+- Worked with PostgreSQL, Redis, and Docker
+- Collaborated with cross-functional teams using Agile methodologies
+
+Junior Developer at StartupXYZ (2020-2021)
+- Built responsive web interfaces using HTML, CSS, JavaScript
+- Integrated third-party APIs and payment gateways
+- Performed unit testing and debugging
+- Participated in code reviews and pair programming
+
+SKILLS
+Programming Languages: Python, JavaScript, SQL, HTML, CSS
+Frameworks: Django, React, Flask, Node.js
+Databases: PostgreSQL, MySQL, MongoDB, Redis
+Tools: Git, Docker, Jenkins, AWS, Linux
+Methodologies: Agile, TDD, CI/CD
+
+EDUCATION
+Bachelor of Science in Computer Science
+University of Technology (2016-2020)
+
+CERTIFICATIONS
+AWS Certified Developer Associate
+Python Professional Certificate 
