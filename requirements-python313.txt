@@ -1,9 +1,12 @@
+# Resume Match Score Predictor - Python 3.13 兼容版本
+# 基于PyTorch的机器学习简历匹配评价器
+
 # 核心NLP库
 spacy>=3.6.0
 scikit-learn>=1.3.0
 nltk>=3.8.0
 
-# PyTorch深度学习框架
+# PyTorch深度学习框架 (Python 3.13 兼容)
 torch>=1.12.0
 sentence-transformers>=2.2.0
 transformers>=4.20.0

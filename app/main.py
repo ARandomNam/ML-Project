@@ -146,6 +146,64 @@ def display_skills_analysis(skill_analysis):
         st.write(", ".join(skill_analysis['extra_skills']))
 
 
+def create_scores_dataframe(analysis_result, weights):
+    """创建分数数据框"""
+    scores_data = [
+        {
+            "指标": "TF-IDF相似度",
+            "分数": f"{analysis_result['scores']['tfidf_similarity']:.3f}",
+            "权重": f"{weights.get('tfidf_similarity', 0):.2f}"
+        },
+        {
+            "指标": "spaCy语义相似度",
+            "分数": f"{analysis_result['scores']['spacy_similarity'] or 0:.3f}",
+            "权重": f"{weights.get('spacy_similarity', 0):.2f}"
+        },
+        {
+            "指标": "关键词重叠度",
+            "分数": f"{analysis_result['scores']['keyword_overlap']:.3f}",
+            "权重": f"{weights.get('keyword_overlap', 0):.2f}"
+        },
+        {
+            "指标": "技能匹配度",
+            "分数": f"{analysis_result['scores']['skill_match']:.3f}",
+            "权重": f"{weights.get('skill_match', 0):.2f}"
+        }
+    ]
+    
+    # 添加PyTorch深度学习分数
+    if analysis_result.get('deep_learning_available') and 'pytorch_similarity' in analysis_result['scores']:
+        scores_data.append({
+            "指标": "🚀 PyTorch综合",
+            "分数": f"{analysis_result['scores']['pytorch_similarity']:.3f}",
+            "权重": f"{weights.get('pytorch_similarity', 0):.2f}"
+        })
+        
+        # 添加各个模型的详细分数
+        if 'sentence_bert' in analysis_result['scores']:
+            scores_data.append({
+                "指标": "📊 Sentence-BERT",
+                "分数": f"{analysis_result['scores']['sentence_bert']:.3f}",
+                "权重": "子模型"
+            })
+        
+        if 'sentence_bert_large' in analysis_result['scores']:
+            scores_data.append({
+                "指标": "🎯 BERT-Large",
+                "分数": f"{analysis_result['scores']['sentence_bert_large']:.3f}",
+                "权重": "子模型"
+            })
+            
+        if 'bert_base' in analysis_result['scores']:
+            scores_data.append({
+                "指标": "🔧 BERT-Base",
+                "分数": f"{analysis_result['scores']['bert_base']:.3f}",
+                "权重": "子模型"
+            })
+    
+    return pd.DataFrame(scores_data)
+
+
 def main():
     st.set_page_config(
         page_title="Resume Match Score Predictor",
@@ -178,6 +236,23 @@ def main():
         use_keywords = st.checkbox("关键词匹配", value=True)
         use_skills = st.checkbox("技能匹配", value=True)
         
+        # 深度学习选项
+        deep_learning_available = getattr(st.session_state.calculator, 'deep_learning_available', False)
+        use_sentence_bert = st.checkbox(
+            "🚀 PyTorch 深度学习", 
+            value=deep_learning_available,
+            help="使用PyTorch和BERT模型进行语义相似度计算" if deep_learning_available else "需要安装PyTorch深度学习依赖"
+        )
+        
+        if deep_learning_available:
+            model_info = getattr(st.session_state.calculator.dl_calculator, 'get_model_info', lambda: {})()
+            if model_info.get('available'):
+                st.success(f"🎯 深度学习已启用 | 设备: {model_info.get('device', 'CPU')}")
+                if model_info.get('cuda_available'):
+                    st.info("⚡ GPU 加速可用")
+        else:
+            st.warning("⚠️ PyTorch深度学习功能未启用，请运行: pip install torch sentence-transformers transformers")
+        
         # 权重调整
         st.subheader("权重设置")
         if use_tfidf:
@@ -199,15 +274,21 @@ def main():
             skill_weight = st.slider("技能权重", 0.0, 1.0, 0.25, 0.05)
         else:
             skill_weight = 0.0
+            
+        if use_sentence_bert and deep_learning_available:
+            pytorch_weight = st.slider("PyTorch深度学习权重", 0.0, 1.0, 0.25, 0.05)
+        else:
+            pytorch_weight = 0.0
         
         # 标准化权重
-        total_weight = tfidf_weight + spacy_weight + keyword_weight + skill_weight
+        total_weight = tfidf_weight + spacy_weight + keyword_weight + skill_weight + pytorch_weight
         if total_weight > 0:
             weights = {
                 'tfidf_similarity': tfidf_weight / total_weight,
                 'spacy_similarity': spacy_weight / total_weight,
                 'keyword_overlap': keyword_weight / total_weight,
-                'skill_match': skill_weight / total_weight
+                'skill_match': skill_weight / total_weight,
+                'pytorch_similarity': pytorch_weight / total_weight
             }
         else:
             weights = None
@@ -263,29 +344,14 @@ def main():
                     
                     with col2:
                         st.subheader("📈 详细分数")
-                        scores_df = pd.DataFrame([
-                            {
-                                "指标": "TF-IDF相似度",
-                                "分数": f"{analysis_result['scores']['tfidf_similarity']:.3f}",
-                                "权重": f"{weights['tfidf_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "spaCy语义相似度",
-                                "分数": f"{analysis_result['scores']['spacy_similarity'] or 0:.3f}",
-                                "权重": f"{weights['spacy_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "关键词重叠度",
-                                "分数": f"{analysis_result['scores']['keyword_overlap']:.3f}",
-                                "权重": f"{weights['keyword_overlap']:.2f}"
-                            },
-                            {
-                                "指标": "技能匹配度",
-                                "分数": f"{analysis_result['scores']['skill_match']:.3f}",
-                                "权重": f"{weights['skill_match']:.2f}"
-                            }
-                        ])
+                        scores_df = create_scores_dataframe(analysis_result, weights)
                         st.dataframe(scores_df, use_container_width=True)
+                        
+                        # 显示深度学习模型信息
+                        if analysis_result.get('deep_learning_available'):
+                            model_info = analysis_result.get('model_info', {})
+                            if model_info.get('available'):
+                                st.caption(f"💡 深度学习: {model_info.get('device', 'CPU')} | 模型数量: {len(model_info.get('models', []))}")
                     
                     # 匹配解释
                     st.subheader("📝 匹配分析报告")
@@ -366,29 +432,14 @@ def main():
                     
                     with col2:
                         st.subheader("📈 详细分数")
-                        scores_df = pd.DataFrame([
-                            {
-                                "指标": "TF-IDF相似度",
-                                "分数": f"{analysis_result['scores']['tfidf_similarity']:.3f}",
-                                "权重": f"{weights['tfidf_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "spaCy语义相似度", 
-                                "分数": f"{analysis_result['scores']['spacy_similarity'] or 0:.3f}",
-                                "权重": f"{weights['spacy_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "关键词重叠度",
-                                "分数": f"{analysis_result['scores']['keyword_overlap']:.3f}",
-                                "权重": f"{weights['keyword_overlap']:.2f}"
-                            },
-                            {
-                                "指标": "技能匹配度",
-                                "分数": f"{analysis_result['scores']['skill_match']:.3f}",
-                                "权重": f"{weights['skill_match']:.2f}"
-                            }
-                        ])
+                        scores_df = create_scores_dataframe(analysis_result, weights)
                         st.dataframe(scores_df, use_container_width=True)
+                        
+                        # 显示深度学习模型信息
+                        if analysis_result.get('deep_learning_available'):
+                            model_info = analysis_result.get('model_info', {})
+                            if model_info.get('available'):
+                                st.caption(f"💡 深度学习: {model_info.get('device', 'CPU')} | 模型数量: {len(model_info.get('models', []))}")
                     
                     # 匹配解释
                     st.subheader("📝 匹配分析报告")
@@ -454,29 +505,14 @@ def main():
                     
                     with col2:
                         st.subheader("📈 详细分数")
-                        scores_df = pd.DataFrame([
-                            {
-                                "指标": "TF-IDF相似度",
-                                "分数": f"{analysis_result['scores']['tfidf_similarity']:.3f}",
-                                "权重": f"{weights['tfidf_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "spaCy语义相似度",
-                                "分数": f"{analysis_result['scores']['spacy_similarity'] or 0:.3f}",
-                                "权重": f"{weights['spacy_similarity']:.2f}"
-                            },
-                            {
-                                "指标": "关键词重叠度",
-                                "分数": f"{analysis_result['scores']['keyword_overlap']:.3f}",
-                                "权重": f"{weights['keyword_overlap']:.2f}"
-                            },
-                            {
-                                "指标": "技能匹配度",
-                                "分数": f"{analysis_result['scores']['skill_match']:.3f}",
-                                "权重": f"{weights['skill_match']:.2f}"
-                            }
-                        ])
+                        scores_df = create_scores_dataframe(analysis_result, weights)
                         st.dataframe(scores_df, use_container_width=True)
+                        
+                        # 显示深度学习模型信息
+                        if analysis_result.get('deep_learning_available'):
+                            model_info = analysis_result.get('model_info', {})
+                            if model_info.get('available'):
+                                st.caption(f"💡 深度学习: {model_info.get('device', 'CPU')} | 模型数量: {len(model_info.get('models', []))}")
                     
                     # 匹配解释
                     st.subheader("📝 匹配分析报告")

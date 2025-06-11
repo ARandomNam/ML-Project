@@ -10,6 +10,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import cosine
 import spacy
 
+# 导入深度学习模块
+try:
+    from .deep_learning import DeepLearningCalculator
+    DEEP_LEARNING_AVAILABLE = True
+except ImportError:
+    DEEP_LEARNING_AVAILABLE = False
+
 
 class SimilarityCalculator:
     """相似度计算器类"""
@@ -25,6 +32,19 @@ class SimilarityCalculator:
             print("Warning: spaCy model 'en_core_web_md' not found. Using TF-IDF only.")
             self.nlp = None
             self.spacy_available = False
+        
+        # 初始化深度学习计算器
+        if DEEP_LEARNING_AVAILABLE:
+            try:
+                self.dl_calculator = DeepLearningCalculator()
+                self.deep_learning_available = self.dl_calculator.available
+            except Exception as e:
+                print(f"Deep learning initialization failed: {e}")
+                self.dl_calculator = None
+                self.deep_learning_available = False
+        else:
+            self.dl_calculator = None
+            self.deep_learning_available = False
     
     def calculate_tfidf_similarity(self, resume_text: str, job_text: str) -> float:
         """
@@ -196,12 +216,21 @@ class SimilarityCalculator:
             综合分析结果
         """
         if weights is None:
-            weights = {
-                'tfidf_similarity': 0.3,
-                'spacy_similarity': 0.2,
-                'keyword_overlap': 0.25,
-                'skill_match': 0.25
-            }
+            if self.deep_learning_available:
+                weights = {
+                    'tfidf_similarity': 0.2,
+                    'spacy_similarity': 0.15,
+                    'keyword_overlap': 0.2,
+                    'skill_match': 0.2,
+                    'pytorch_similarity': 0.25
+                }
+            else:
+                weights = {
+                    'tfidf_similarity': 0.3,
+                    'spacy_similarity': 0.2,
+                    'keyword_overlap': 0.25,
+                    'skill_match': 0.25
+                }
         
         # 计算各项相似度指标
         tfidf_score = self.calculate_tfidf_similarity(
@@ -224,25 +253,45 @@ class SimilarityCalculator:
             job_data['tech_skills']
         )
         
-        # 如果spaCy不可用，重新分配权重
+        # PyTorch深度学习相似度计算
+        dl_results = {}
+        pytorch_score = 0.0
+        if self.deep_learning_available and self.dl_calculator:
+            dl_results = self.dl_calculator.calculate_enhanced_similarity(
+                resume_data['cleaned'], 
+                job_data['cleaned']
+            )
+            pytorch_score = dl_results.get('overall_score', 0.0)
+        
+        # 如果某些模型不可用，重新分配权重
         if not self.spacy_available:
-            weights['tfidf_similarity'] = 0.4
-            weights['keyword_overlap'] = 0.3
-            weights['skill_match'] = 0.3
+            if self.deep_learning_available:
+                weights['tfidf_similarity'] = 0.25
+                weights['keyword_overlap'] = 0.25
+                weights['skill_match'] = 0.25
+                weights['pytorch_similarity'] = 0.25
+            else:
+                weights['tfidf_similarity'] = 0.4
+                weights['keyword_overlap'] = 0.3
+                weights['skill_match'] = 0.3
             weights['spacy_similarity'] = 0.0
+        
+        if not self.deep_learning_available:
+            weights.pop('pytorch_similarity', None)
         
         # 计算加权综合分数
         comprehensive_score = (
-            weights['tfidf_similarity'] * tfidf_score +
-            weights['spacy_similarity'] * spacy_score +
-            weights['keyword_overlap'] * keyword_analysis['overlap_ratio'] +
-            weights['skill_match'] * skill_analysis['skill_match_ratio']
+            weights.get('tfidf_similarity', 0) * tfidf_score +
+            weights.get('spacy_similarity', 0) * spacy_score +
+            weights.get('keyword_overlap', 0) * keyword_analysis['overlap_ratio'] +
+            weights.get('skill_match', 0) * skill_analysis['skill_match_ratio'] +
+            weights.get('pytorch_similarity', 0) * pytorch_score
         )
         
         # 计算百分制分数
         percentage_score = comprehensive_score * 100
         
-        return {
+        result = {
             'overall_score': comprehensive_score,
             'percentage_score': round(percentage_score, 1),
             'scores': {
@@ -254,8 +303,28 @@ class SimilarityCalculator:
             'keyword_analysis': keyword_analysis,
             'skill_analysis': skill_analysis,
             'weights_used': weights,
-            'spacy_available': self.spacy_available
+            'spacy_available': self.spacy_available,
+            'deep_learning_available': self.deep_learning_available
         }
+        
+        # 添加PyTorch深度学习结果
+        if self.deep_learning_available and dl_results:
+            result['scores']['pytorch_similarity'] = round(pytorch_score, 3)
+            
+            # 添加多模型评分详情
+            multi_scores = dl_results.get('multi_model_scores', {})
+            if multi_scores:
+                result['scores']['sentence_bert'] = round(multi_scores.get('sentence_bert', 0.0), 3)
+                result['scores']['sentence_bert_large'] = round(multi_scores.get('sentence_bert_large', 0.0), 3)
+                result['scores']['bert_base'] = round(multi_scores.get('bert_base', 0.0), 3)
+            
+            result['pytorch_results'] = dl_results
+            
+            # 添加PyTorch设备信息
+            if self.dl_calculator:
+                result['model_info'] = self.dl_calculator.get_model_info()
+        
+        return result
     
     def get_match_explanation(self, analysis_result: Dict) -> str:
         """
